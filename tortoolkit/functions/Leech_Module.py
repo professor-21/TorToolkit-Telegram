@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # (c) YashDK [yash-dk@github]
 
-import re,os,shutil,time, aiohttp, requests
+import re,os,shutil,time, aiohttp
 from telethon.tl import types
 import logging, shutil
 import math, json
@@ -292,11 +292,16 @@ async def check_link(msg,rclone=False,is_zip=False, extract=False):
                 await aio.sleep(2)
                 try:
                     link = re.findall(r'\bhttps?://.*mediafire\.com\S+', urls)[0]
+                    async with aiohttp.ClientSession() as ttksess:
+                        resp = await ttksess.get(link)
+                        restext = await resp.text()
+                    
+                    page = BeautifulSoup(restext, 'lxml')
+                    info = page.find('a', {'aria-label': 'Download file'})
+                    url = info.get('href')
                 except:
                     await omess.reply("**No mediafire link found.**")
-                page = BeautifulSoup(requests.get(link).content, 'lxml')
-                info = page.find('a', {'aria-label': 'Download file'})
-                url = info.get('href')
+                
                 
             #Zippyshare
             elif  'zippyshare.com' in urls:
@@ -314,17 +319,20 @@ async def check_link(msg,rclone=False,is_zip=False, extract=False):
                     r'lbutton\'\).href = "/d/[a-zA-Z\d]{8}/\"\+\(a \+ \d{6}%b\)\+"/('
                     r'[\w%-.]+)";'
                 )
-                session = requests.Session()
-                with session as ses:
-                    match = re.match(tulloh, urls)
-                    if not match:
-                        await omess.reply("**Invalid URL:**\n" + str(urls))
+                
+                match = re.match(tulloh, urls)
+                if not match:
+                    await omess.reply("**Invalid URL:**\n" + str(urls))
+                
                 server, id_ = match.group(1), match.group(2)
-                res = ses.get(urls)
-                res.raise_for_status()
-                match = re.search(regex_result, res.text, re.DOTALL)
+                async with aiohttp.ClientSession() as ttksess:
+                    resp = await ttksess.get(urls)
+                    restext = await resp.text()
+                    
+                match = re.search(regex_result, restext, re.DOTALL)
                 if not match:
                     await omess.reply("**Invalid response, try again!**")
+                
                 val_1 = int(match.group(1))
                 val_2 = math.floor(val_1 / 3)
                 val_3 = int(match.group(2))
@@ -333,17 +341,23 @@ async def check_link(msg,rclone=False,is_zip=False, extract=False):
                 url = "https://www{}.zippyshare.com/d/{}/{}/{}".format(server, id_, val, name)
                 
            #yadisk
-            elif 'yadi.sk' in urls:
+            elif 'yadi.sk' in urls or 'disk.yandex.com' in urls:
                 await rmsg.edit("`Generating yadisk link.`")
                 await aio.sleep(2)
                 try:
-                    link = re.findall(r'\bhttps?://.*yadi\.sk\S+', urls)[0]
+                    link = re.findall(r'\b(https?://.*(yadi|disk)\.(sk|yandex)*(|com)\S+)', urls)[0][0]
+                    print(link)
                 except:
                     await omess.reply("**No yadisk link found.**")
                 api = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key={}'
                 try:
-                    url = requests.get(api.format(link)).json()['href']
+                    async with aiohttp.ClientSession() as ttksess:
+                        resp = await ttksess.get(api.format(link))
+                        restext = await resp.json()
+                        url = restext['href']
+                    
                 except:
+                    torlog.exception("Ayee jooo")
                     await omess.reply("**404 File Not Found** or \n**Download limit reached.**")
 
             # End directlink generator.
